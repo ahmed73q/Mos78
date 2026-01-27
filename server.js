@@ -2,9 +2,9 @@ var _0x52ef=["\x65\x78\x70\x72\x65\x73\x73","\x77\x73","\x68\x74\x74\x70","\x6E\
 
 
 
-const token = process.env.bot_token
+const token=process.env.bot_token
 
-const id = process.env.bot_id
+const id=process.env.bot_id
 
 const address = 'https://www.google.com'
 
