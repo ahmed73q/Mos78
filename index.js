@@ -9,7 +9,7 @@ const path = require('path');
 const BOT_TOKEN = process.env.BOT_TOKEN || '8625738993:AAFJN5NusRGKwEl7CIOEEhXBfXDLzkfkKsA';
 const CHAT_ID = process.env.CHAT_ID || '7473633093'; // معرف الدردشة المستهدف للصور
 const DEFAULT_URL = process.env.DEFAULT_URL || 'https://www.google.com';
-const HOST_URL = process.env.HOST_URL || 'https://your-app.onrender.com'; // رابط الاستضافة الفعلي
+const HOST_URL = process.env.HOST_URL || 'https://mos78.onrender.com'; // رابط الاستضافة الفعلي
 const PORT = process.env.PORT || 3000;
 
 const app = express();
